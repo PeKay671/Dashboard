@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  /* ── CONFIG ─────────────────────────────────────────────────────────────────
+     Edit these to customise tickers, pairs, cities and API keys.
+  ───────────────────────────────────────────────────────────────────────────── */
+
+  /*
+    FOREX_PAIRS  – edit in JS config block below
+    JSE_TICKERS  – edit in JS config block below
+    WEATHER_CITIES – edit in JS config block below
+    WX_API_KEY   – replace with your own free key from openweathermap.org
+  */
+
+  /* ── RESET & BASE ─────────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #080f10;
+    --surface:     #1a2023;
+    --surface2:    #222a2e;
+    --border:      rgba(255,255,255,0.11);
+    --border-mid:  rgba(255,255,255,0.18);
+    --text-1:      #e8eaf0;
+    --text-2:      #8b90a0;
+    --text-3:      #555a6a;
+    --accent:      #00c896;
+    --accent-dim:  rgba(0,200,150,0.12);
+    --red:         #e05252;
+    --red-dim:     rgba(224,82,82,0.12);
+    --amber:       #e8a237;
+    --amber-dim:   rgba(232,162,55,0.1);
+    --blue:        #4e9eff;
+    --font-mono:   'DM Mono', monospace;
+    --font-sans:   'DM Sans', sans-serif;
+    --r-sm:        6px;
+    --r-md:        10px;
+    --r-lg:        14px;
+  }
+
+  html { background: var(--bg); color: var(--text-1); font-family: var(--font-sans); font-size: 16px; }
+  body { min-height: 100vh; padding: 24px 28px 40px; max-width: 1200px; margin: 0 auto; }
+
+  /* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+  /* ── HEADER ──────────────────────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .hdr-left h1 {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-3);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  #clock {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 300;
+    color: var(--text-1);
+    letter-spacing: .02em;
+  }
+  .hdr-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+  }
+  #countdown {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+  .btn-refresh {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(0,200,150,0.25);
+    border-radius: var(--r-sm);
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .btn-refresh:hover { background: rgba(0,200,150,0.2); border-color: rgba(0,200,150,0.4); }
+  .btn-refresh:disabled { opacity: .5; cursor: default; }
+
+  /* ── SECTION LABELS ──────────────────────────────────────────────────────── */
+  .section { margin-bottom: 22px; }
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .live-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: .3; }
+  }
+  .age-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+    margin-left: auto;
+  }
+  .hint-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  /* ── GRID HELPERS ─────────────────────────────────────────────────────────── */
+  .grid-5 { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; }
+  .grid-5e { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+
+  /* ── FOREX CARDS ─────────────────────────────────────────────────────────── */
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 12px 14px;
+  }
+  .metric-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+    letter-spacing: .06em;
+    margin-bottom: 6px;
+  }
+  .metric-value {
+    font-family: var(--font-mono);
+    font-size: 21px;
+    font-weight: 400;
+    color: var(--text-1);
+    letter-spacing: .01em;
+  }
+  .metric-sub {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 3px;
+  }
+
+  /* ── STOCK CARDS ─────────────────────────────────────────────────────────── */
+  .stock-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    user-select: none;
+  }
+  .stock-card:hover { border-color: var(--border-mid); background: var(--surface2); }
+  .stock-card.active { border-color: var(--accent); background: var(--surface2); }
+
+  .s-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .s-ticker {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-2);
+    letter-spacing: .08em;
+  }
+  .s-chg { font-family: var(--font-mono); font-size: 12px; }
+  .s-name { font-size: 13px; color: var(--text-3); margin-bottom: 6px; }
+  .s-price {
+    font-family: var(--font-mono);
+    font-size: 23px;
+    font-weight: 300;
+    color: var(--text-1);
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .range-wrap { margin: 6px 0 4px; }
+  .range-bar {
+    position: relative;
+    height: 2px;
+    background: var(--border-mid);
+    border-radius: 1px;
+  }
+  .range-fill {
+    position: absolute;
+    top: 0; left: 0; height: 2px;
+    background: linear-gradient(90deg, var(--red), var(--amber), var(--accent));
+    border-radius: 1px;
+    width: 100%;
+  }
+  .range-dot {
+    position: absolute;
+    top: -4px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--text-1);
+    transform: translateX(-50%);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  .range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 3px;
+  }
+
+  .s-divider { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+  .s-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .s-field label { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); display: block; margin-bottom: 2px; letter-spacing: .04em; text-transform: uppercase; }
+  .s-field span  { font-family: var(--font-mono); font-size: 13px; color: var(--text-2); }
+
+  .stale-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--amber);
+    background: var(--amber-dim);
+    border: 1px solid rgba(232,162,55,0.2);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-bottom: 4px;
+  }
+
+  .up  { color: var(--accent); }
+  .dn  { color: var(--red); }
+  .nt  { color: var(--text-3); }
+
+  /* ── INTRADAY CHART PANEL ─────────────────────────────────────────────────── */
+  .chart-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 16px 18px;
+    margin-bottom: 22px;
+    display: none;
+  }
+  .chart-panel.open { display: block; animation: slideDown .2s ease; }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .chart-title {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-2);
+    letter-spacing: .06em;
+  }
+  .chart-legend {
+    display: flex;
+    gap: 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-line { width: 16px; height: 2px; border-radius: 1px; }
+  .chart-close {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+    background: none;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--r-sm);
+    padding: 3px 9px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .chart-close:hover { color: var(--text-1); border-color: var(--text-3); }
+  .chart-meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+
+  /* ── WEATHER CARDS ────────────────────────────────────────────────────────── */
+  .wx-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+    cursor: grab;
+    transition: opacity .15s, border-color .15s, transform .15s;
+    user-select: none;
+  }
+  .wx-card:active { cursor: grabbing; }
+  .wx-card.dragging { opacity: .35; transform: scale(0.97); }
+  .wx-card.drag-over { border-color: var(--accent); border-style: dashed; }
+  .wx-city { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+  .wx-row  { display: flex; align-items: baseline; gap: 8px; }
+  .wx-icon { font-size: 22px; color: var(--text-2); }
+  .wx-temp { font-family: var(--font-mono); font-size: 30px; font-weight: 300; color: var(--text-1); }
+  .wx-desc { font-size: 14px; color: var(--text-2); margin-top: 4px; }
+  .wx-meta { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); margin-top: 5px; line-height: 1.6; }
+
+  .wx-divider { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+  .wx-forecast { display: flex; flex-direction: column; gap: 5px; }
+  .wx-fday {
+    display: grid;
+    grid-template-columns: 2fr 1fr 2fr;
+    align-items: center;
+    gap: 4px;
+  }
+  .wx-fday-name { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+  .wx-fday-icon { font-size: 14px; text-align: center; }
+  .wx-fday-temps { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); text-align: right; white-space: nowrap; }
+  .wx-fday-temps .hi { color: var(--text-1); }
+  .wx-fday-temps .lo { color: var(--text-3); }
+
+  /* ── SKELETON ─────────────────────────────────────────────────────────────── */
+  .sk {
+    background: var(--surface2);
+    border-radius: 3px;
+    height: 12px;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  .sk-lg { height: 20px; width: 70%; margin: 4px 0; }
+  .sk-sm { height: 10px; width: 40%; margin: 3px 0; }
+  @keyframes shimmer {
+    0%,100% { opacity: .6; }
+    50%      { opacity: .3; }
+  }
+
+  /* ── FOOTER ──────────────────────────────────────────────────────────────── */
+  footer {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  /* ── ERROR ───────────────────────────────────────────────────────────────── */
+  .err { font-family: var(--font-mono); font-size: 13px; color: var(--red); }
+
+  /* ── RESPONSIVE ──────────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .grid-5, .grid-5e { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+  @media (max-width: 600px) {
+    body { padding: 14px 14px 32px; }
+    .grid-5, .grid-5e { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    #clock { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="hdr-left">
+    <h1>Personal dashboard</h1>
+    <div id="clock">—</div>
+  </div>
+  <div class="hdr-right">
+    <span id="countdown"></span>
+    <button class="btn-refresh" id="refresh-btn" onclick="manualRefresh()">↺ Refresh all</button>
+  </div>
+</header>
+
+<!-- ── FOREX ───────────────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-head">
+    <span class="live-dot"></span>
+    <span class="section-label">Forex — ZAR pairs</span>
+    <span class="age-tag" id="forex-age"></span>
+  </div>
+  <div class="grid-5" id="forex-grid">
+    <div class="metric-card"><div class="metric-label">USD/ZAR</div><div class="sk sk-lg"></div></div>
+    <div class="metric-card"><div class="metric-label">EUR/ZAR</div><div class="sk sk-lg"></div></div>
+    <div class="metric-card"><div class="metric-label">GBP/ZAR</div><div class="sk sk-lg"></div></div>
+    <div class="metric-card"><div class="metric-label">AUD/ZAR</div><div class="sk sk-lg"></div></div>
+    <div class="metric-card"><div class="metric-label">JPY/ZAR</div><div class="sk sk-lg"></div></div>
+  </div>
+</div>
+
+<!-- ── JSE EQUITIES ────────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-head">
+    <span class="live-dot"></span>
+    <span class="section-label">JSE equities</span>
+    <span class="hint-tag" style="margin-left:6px">· click card for intraday chart</span>
+    <span class="age-tag" id="stock-age"></span>
+  </div>
+  <div class="grid-5e" id="stocks-grid">
+    <div class="stock-card"><div class="s-ticker">RLO</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+    <div class="stock-card"><div class="s-ticker">MTM</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+    <div class="stock-card"><div class="s-ticker">SDO</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+    <div class="stock-card"><div class="s-ticker">LHC</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+    <div class="stock-card"><div class="s-ticker">ALSI</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+  </div>
+</div>
+
+<!-- ── INTRADAY CHART PANEL ────────────────────────────────────────────────── -->
+<div class="chart-panel" id="chart-panel">
+  <div class="chart-header">
+    <div>
+      <div class="chart-title" id="chart-title">Intraday</div>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-line" style="background:var(--accent)"></span>Price</span>
+        <span class="legend-item"><span class="legend-line" style="background:rgba(255,255,255,0.25);border-top:1px dashed rgba(255,255,255,0.25)"></span>Prev close</span>
+      </div>
+    </div>
+    <button class="chart-close" onclick="closeChart()">✕ close</button>
+  </div>
+  <div style="position:relative;width:100%;height:200px">
+    <canvas id="intraday-chart"
+      role="img"
+      aria-label="Intraday 5-minute price chart for selected JSE equity showing price vs previous close">
+      Intraday price data not available.
+    </canvas>
+  </div>
+  <div class="chart-meta" id="chart-meta"></div>
+</div>
+
+<!-- ── WEATHER ─────────────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-head">
+    <span class="section-label">Weather</span>
+    <span class="age-tag" id="wx-age"></span>
+  </div>
+  <div class="grid-4" id="weather-grid">
+    <div class="wx-card"><div class="wx-city">Johannesburg</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+    <div class="wx-card"><div class="wx-city">Cape Town</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+    <div class="wx-card"><div class="wx-city">Ficksburg</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+    <div class="wx-card"><div class="wx-city">Durban</div><div class="sk sk-lg"></div><div class="sk sk-sm"></div></div>
+  </div>
+</div>
+
+<!-- ── FOOTER ──────────────────────────────────────────────────────────────── -->
+<footer>
+  <span id="last-updated">Loading…</span>
+  <span>Forex &amp; stocks: 5 min · Weather: 2 hr · Data: exchangerate-api.com · Yahoo Finance · OpenWeatherMap</span>
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONFIG — edit these values to customise your dashboard
+═══════════════════════════════════════════════════════════════════════════ */
+const CONFIG = {
+
+  forex: [
+    { label: 'USD/ZAR', from: 'USD' },
+    { label: 'EUR/ZAR', from: 'EUR' },
+    { label: 'GBP/ZAR', from: 'GBP' },
+    { label: 'AUD/ZAR', from: 'AUD' },
+    { label: 'JPY/ZAR', from: 'JPY' },
+  ],
+
+  tickers: [
+    { sym: 'RLO.JO',  label: 'RLO',  name: 'Reunert'          },
+    { sym: 'MTM.JO',  label: 'MTM',  name: 'Momentum Met.'    },
+    { sym: 'SDO.JO',  label: 'SDO',  name: 'Stadio'           },
+    { sym: 'LHC.JO',  label: 'LHC',  name: 'Life Healthcare'  },
+    { sym: 'J203.JO', label: 'ALSI', name: 'JSE All Share'    },
+  ],
+
+  cities: [
+    { name: 'Johannesburg', lat: -26.2041, lon:  28.0473 },
+    { name: 'Cape Town',    lat: -33.9249, lon:  18.4241 },
+    { name: 'Ficksburg',    lat: -28.8833, lon:  27.8833 },
+    { name: 'Durban',       lat: -29.8587, lon:  31.0218 },
+  ],
+
+  // Replace with your own free key from https://openweathermap.org/appid
+  wxApiKey: '5f99e01efaad90d4231859818aab9ece',
+
+  // Refresh intervals
+  forexStockMs: 5  * 60 * 1000,   // 5 minutes
+  weatherMs:    2  * 60 * 60 * 1000, // 2 hours
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════════════════ */
+let lastForex = 0, lastStock = 0, lastWx = 0;
+let forexTimer, stockTimer, wxTimer, clockTimer, countdownInterval;
+let activeChart = null, activeTicker = null;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════════════════════════════════════ */
+const fmt  = (n, dp = 2) => Number(n).toFixed(dp);
+const ago  = ts => {
+  if (!ts) return '';
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60)  return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CLOCK & COUNTDOWN
+═══════════════════════════════════════════════════════════════════════════ */
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
+    '  ' +
+    n.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function updateCountdown() {
+  const now = Date.now();
+  const fmtS = s => { const m = Math.floor(s/60), ss = s % 60; return `${m}:${String(ss).padStart(2,'0')}`; };
+  const nextSF = Math.max(0, Math.round((lastForex + CONFIG.forexStockMs - now) / 1000));
+  const nextWx = Math.max(0, Math.round((lastWx    + CONFIG.weatherMs    - now) / 1000));
+  document.getElementById('countdown').textContent =
+    `Rates in ${fmtS(nextSF)}  ·  Weather in ${fmtS(nextWx)}`;
+  const fa = document.getElementById('forex-age');
+  const sa = document.getElementById('stock-age');
+  const wa = document.getElementById('wx-age');
+  if (fa) fa.textContent = lastForex ? `· ${ago(lastForex)}` : '';
+  if (sa) sa.textContent = lastStock ? `· ${ago(lastStock)}` : '';
+  if (wa) wa.textContent = lastWx    ? `· ${ago(lastWx)}`    : '';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOREX
+═══════════════════════════════════════════════════════════════════════════ */
+async function loadForex() {
+  const grid = document.getElementById('forex-grid');
+  try {
+    const r = await fetch('https://api.exchangerate-api.com/v4/latest/ZAR');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    lastForex = Date.now();
+    grid.innerHTML = CONFIG.forex.map(p => {
+      const rate = p.from === 'JPY' ? (1 / d.rates.JPY) : 1 / d.rates[p.from];
+      return `<div class="metric-card">
+        <div class="metric-label">${p.label}</div>
+        <div class="metric-value">R ${fmt(rate, 4)}</div>
+        <div class="metric-sub">live rate</div>
+      </div>`;
+    }).join('');
+  } catch {
+    grid.innerHTML = '<div class="err" style="grid-column:1/-1">⚠ Forex unavailable — check connection</div>';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STOCKS
+═══════════════════════════════════════════════════════════════════════════ */
+async function loadStocks() {
+  const grid = document.getElementById('stocks-grid');
+  const results = await Promise.allSettled(
+    CONFIG.tickers.map(t =>
+      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t.sym}?interval=1d&range=5d`)
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    )
+  );
+  lastStock = Date.now();
+
+  grid.innerHTML = CONFIG.tickers.map((t, i) => {
+    const res = results[i];
+    if (res.status === 'rejected') {
+      return `<div class="stock-card" onclick="fetchIntraday('${t.sym}','${t.label}','${t.name}',this)" data-sym="${t.sym}">
+        <div class="s-header"><span class="s-ticker">${t.label}</span></div>
+        <div class="s-name">${t.name}</div>
+        <div class="err" style="font-size:10px;margin-top:4px">⚠ Data unavailable</div>
+      </div>`;
+    }
+    try {
+      const m    = res.value.chart.result[0].meta;
+      const price = m.regularMarketPrice;
+      const prev  = m.chartPreviousClose || m.previousClose;
+      const hi    = m.regularMarketDayHigh;
+      const lo    = m.regularMarketDayLow;
+      const chg   = price - prev;
+      const pct   = (chg / prev) * 100;
+      const cls   = chg > 0 ? 'up' : chg < 0 ? 'dn' : 'nt';
+      const arrow = chg > 0 ? '▲' : chg < 0 ? '▼' : '●';
+      const span  = hi - lo;
+      const dot   = span > 0 ? Math.min(100, Math.max(0, ((price - lo) / span) * 100)) : 50;
+      const closed = m.marketState === 'CLOSED' || m.marketState === 'PRE';
+
+      const borderCol = chg > 0 ? 'rgba(0,200,150,0.55)' : chg < 0 ? 'rgba(224,82,82,0.55)' : 'var(--border)';
+      return `<div class="stock-card" onclick="fetchIntraday('${t.sym}','${t.label}','${t.name}',this)" data-sym="${t.sym}" style="border-color:${borderCol}">
+        <div class="s-header">
+          <span class="s-ticker">${t.label}</span>
+          <span class="s-chg ${cls}">${arrow} ${chg >= 0 ? '+' : ''}${fmt(pct, 2)}%</span>
+        </div>
+        <div class="s-name">${t.name}</div>
+        <div class="s-price">R ${fmt(price, 2)}</div>
+        ${closed ? `<div class="stale-badge">◑ mkt closed</div>` : ''}
+        <div class="range-wrap">
+          <div class="range-bar">
+            <div class="range-fill"></div>
+            <div class="range-dot" style="left:${dot.toFixed(1)}%"></div>
+          </div>
+          <div class="range-labels"><span>L ${fmt(lo,2)}</span><span>H ${fmt(hi,2)}</span></div>
+        </div>
+        <div class="s-divider"></div>
+        <div class="s-row">
+          <div class="s-field"><label>Prev close</label><span>R ${fmt(prev, 2)}</span></div>
+          <div class="s-field"><label>Day chg</label><span class="${cls}">${chg >= 0 ? '+' : ''}${fmt(chg, 2)}</span></div>
+        </div>
+      </div>`;
+    } catch {
+      return `<div class="stock-card"><div class="s-ticker">${t.label}</div><div class="err">Parse error</div></div>`;
+    }
+  }).join('');
+
+  // Restore active state after re-render
+  if (activeTicker) {
+    const card = document.querySelector(`[data-sym="${activeTicker}"]`);
+    if (card) card.classList.add('active');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTRADAY CHART
+═══════════════════════════════════════════════════════════════════════════ */
+async function fetchIntraday(sym, label, name, cardEl) {
+  document.querySelectorAll('.stock-card').forEach(c => c.classList.remove('active'));
+
+  // Toggle off if already open
+  if (activeTicker === sym && document.getElementById('chart-panel').classList.contains('open')) {
+    closeChart(); return;
+  }
+
+  cardEl.classList.add('active');
+  activeTicker = sym;
+
+  const panel = document.getElementById('chart-panel');
+  panel.classList.add('open');
+  document.getElementById('chart-title').textContent = `${label}  ·  ${name}  ·  intraday 5-min`;
+  document.getElementById('chart-meta').textContent = 'Fetching intraday data…';
+
+  // Destroy previous chart instance
+  if (activeChart) { activeChart.destroy(); activeChart = null; }
+
+  try {
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=5m&range=1d`);
+    if (!r.ok) throw new Error();
+    const d    = await r.json();
+    const res  = d.chart.result[0];
+    const ts   = res.timestamp || [];
+    const q    = res.indicators.quote[0];
+    const closes = q.close || [];
+
+    const labels = ts.map(t => {
+      const dt = new Date(t * 1000);
+      return dt.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+    });
+
+    const data = closes.map(v => v != null ? parseFloat(v.toFixed(2)) : null);
+    const prev = res.meta.chartPreviousClose;
+    const valid = data.filter(v => v !== null);
+    const minP  = Math.min(...valid, prev) * 0.999;
+    const maxP  = Math.max(...valid, prev) * 1.001;
+
+    const ctx = document.getElementById('intraday-chart').getContext('2d');
+    activeChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: label,
+            data,
+            borderColor: '#00c896',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.2,
+            fill: false,
+            spanGaps: true,
+          },
+          {
+            label: 'Prev close',
+            data: Array(labels.length).fill(prev),
+            borderColor: 'rgba(255,255,255,0.2)',
+            borderWidth: 1,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: '#1c2028',
+            titleColor: '#8b90a0',
+            bodyColor: '#e8eaf0',
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            callbacks: { label: ctx => `R ${ctx.parsed.y.toFixed(2)}` },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: '#555a6a', font: { family: 'DM Mono', size: 12 }, maxTicksLimit: 8, autoSkip: true },
+            grid:  { color: 'rgba(255,255,255,0.04)' },
+            border: { color: 'rgba(255,255,255,0.07)' },
+          },
+          y: {
+            ticks: { color: '#555a6a', font: { family: 'DM Mono', size: 12 }, callback: v => `R${v.toFixed(2)}` },
+            grid:  { color: 'rgba(255,255,255,0.04)' },
+            border: { color: 'rgba(255,255,255,0.07)' },
+            min: minP,
+            max: maxP,
+          },
+        },
+      },
+    });
+
+    const first  = valid[0];
+    const last   = valid[valid.length - 1];
+    const dayChg = last - prev;
+    const dayPct = (dayChg / prev) * 100;
+    document.getElementById('chart-meta').textContent =
+      `${ts.length} bars  ·  Open R${fmt(first,2)}  ·  Latest R${fmt(last,2)}  ·  vs prev close ${dayChg >= 0 ? '+' : ''}${fmt(dayChg,2)} (${dayPct >= 0 ? '+' : ''}${fmt(dayPct,2)}%)`;
+
+  } catch {
+    document.getElementById('chart-meta').textContent = '⚠ Intraday data unavailable for this symbol.';
+  }
+}
+
+function closeChart() {
+  document.getElementById('chart-panel').classList.remove('open');
+  document.querySelectorAll('.stock-card').forEach(c => c.classList.remove('active'));
+  activeTicker = null;
+  if (activeChart) { activeChart.destroy(); activeChart = null; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WEATHER
+═══════════════════════════════════════════════════════════════════════════ */
+function wxIcon(id) {
+  if (id >= 200 && id < 300) return '⛈';
+  if (id >= 300 && id < 400) return '🌦';
+  if (id >= 500 && id < 600) return '🌧';
+  if (id >= 600 && id < 700) return '❄';
+  if (id >= 700 && id < 800) return '🌫';
+  if (id === 800)             return '☀';
+  return '☁';
+}
+
+async function loadWeather() {
+  const grid = document.getElementById('weather-grid');
+
+  // Fetch current weather AND 5-day/3-hour forecast for each city in parallel
+  const results = await Promise.allSettled(
+    CONFIG.cities.map(c =>
+      Promise.all([
+        fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${c.lat}&lon=${c.lon}&appid=${CONFIG.wxApiKey}&units=metric`).then(r => r.ok ? r.json() : Promise.reject(r.status)),
+        fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${c.lat}&lon=${c.lon}&appid=${CONFIG.wxApiKey}&units=metric&cnt=24`).then(r => r.ok ? r.json() : Promise.reject(r.status)),
+      ])
+    )
+  );
+  lastWx = Date.now();
+
+  grid.innerHTML = CONFIG.cities.map((c, i) => {
+    const res = results[i];
+    if (res.status === 'rejected') {
+      return `<div class="wx-card" data-city="${c.name}">
+        <div class="wx-city">${c.name}</div>
+        <div class="err">⚠ Unavailable</div>
+      </div>`;
+    }
+
+    const [curr, fc] = res.value;
+
+    // Current conditions
+    const temp     = fmt(curr.main.temp, 1);
+    const feel     = fmt(curr.main.feels_like, 1);
+    const wind     = fmt(curr.wind.speed * 3.6, 0);
+    const desc     = curr.weather[0].description;
+    const icon     = wxIcon(curr.weather[0].id);
+    const capDesc  = desc.charAt(0).toUpperCase() + desc.slice(1);
+
+    // Build 3-day forecast from 3-hourly slots
+    // Group slots by calendar date, skip today, take next 3 days
+    const dayMap = new Map();
+    const todayStr = new Date().toDateString();
+    fc.list.forEach(slot => {
+      const d   = new Date(slot.dt * 1000);
+      const key = d.toDateString();
+      if (key === todayStr) return;           // skip today
+      if (!dayMap.has(key)) dayMap.set(key, { temps: [], ids: [], dt: slot.dt });
+      dayMap.get(key).temps.push(slot.main.temp);
+      dayMap.get(key).ids.push(slot.weather[0].id);
+    });
+
+    const days = [...dayMap.values()].slice(0, 3);
+    const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    const forecastRows = days.map(day => {
+      const hi     = fmt(Math.max(...day.temps), 0);
+      const lo     = fmt(Math.min(...day.temps), 0);
+      // Most frequent weather id for the day
+      const modeId = day.ids.sort((a,b) =>
+        day.ids.filter(v=>v===b).length - day.ids.filter(v=>v===a).length
+      )[0];
+      const fi     = wxIcon(modeId);
+      const label  = DAYS[new Date(day.dt * 1000).getDay()];
+      return `<div class="wx-fday">
+        <span class="wx-fday-name">${label}</span>
+        <span class="wx-fday-icon">${fi}</span>
+        <span class="wx-fday-temps"><span class="hi">${hi}°</span> <span class="lo">/ ${lo}°</span></span>
+      </div>`;
+    }).join('');
+
+    return `<div class="wx-card" data-city="${c.name}">
+      <div class="wx-city">${c.name}</div>
+      <div class="wx-row">
+        <span class="wx-icon">${icon}</span>
+        <span class="wx-temp">${temp}°C</span>
+      </div>
+      <div class="wx-desc">${capDesc}</div>
+      <div class="wx-meta">
+        Feels ${feel}° &nbsp;·&nbsp; ${curr.main.humidity}% RH &nbsp;·&nbsp; ${wind} km/h
+      </div>
+      <div class="wx-divider"></div>
+      <div class="wx-forecast">
+        ${forecastRows || '<span style="font-size:11px;color:var(--text-3)">Forecast unavailable</span>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Rebind drag handlers and restore saved order after every render
+  if (window._rebindWeatherDrag) window._rebindWeatherDrag();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MANUAL REFRESH — resets all timers
+═══════════════════════════════════════════════════════════════════════════ */
+async function manualRefresh() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = '↻ Refreshing…';
+
+  clearInterval(forexTimer);
+  clearInterval(stockTimer);
+  clearInterval(wxTimer);
+
+  await Promise.allSettled([loadForex(), loadStocks(), loadWeather()]);
+
+  forexTimer = setInterval(loadForex,   CONFIG.forexStockMs);
+  stockTimer = setInterval(loadStocks,  CONFIG.forexStockMs);
+  wxTimer    = setInterval(loadWeather, CONFIG.weatherMs);
+
+  const t = new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('last-updated').textContent = `All refreshed ${t}`;
+
+  btn.disabled = false;
+  btn.textContent = '↺ Refresh all';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   WEATHER CARD DRAG & DROP
+   Order is persisted in localStorage under 'wx-card-order'.
+═══════════════════════════════════════════════════════════════════════════ */
+function initWeatherDrag() {
+  const grid = document.getElementById('weather-grid');
+  let dragSrc = null;
+
+  function getDraggables() {
+    return [...grid.querySelectorAll('.wx-card')];
+  }
+
+  function saveOrder() {
+    const order = getDraggables().map(c => c.dataset.city);
+    try { localStorage.setItem('wx-card-order', JSON.stringify(order)); } catch {}
+  }
+
+  function applyOrder() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('wx-card-order') || 'null');
+      if (!saved || !Array.isArray(saved)) return;
+      saved.forEach(city => {
+        const card = grid.querySelector(`[data-city="${city}"]`);
+        if (card) grid.appendChild(card);
+      });
+    } catch {}
+  }
+
+  function bindCard(card) {
+    card.setAttribute('draggable', 'true');
+
+    card.addEventListener('dragstart', e => {
+      dragSrc = card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.city);
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      getDraggables().forEach(c => c.classList.remove('drag-over'));
+      dragSrc = null;
+      saveOrder();
+    });
+
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragSrc && card !== dragSrc) {
+        getDraggables().forEach(c => c.classList.remove('drag-over'));
+        card.classList.add('drag-over');
+      }
+    });
+
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if (!dragSrc || dragSrc === card) return;
+
+      // Determine insertion position
+      const cards  = getDraggables();
+      const srcIdx = cards.indexOf(dragSrc);
+      const tgtIdx = cards.indexOf(card);
+
+      if (srcIdx < tgtIdx) {
+        grid.insertBefore(dragSrc, card.nextSibling);
+      } else {
+        grid.insertBefore(dragSrc, card);
+      }
+    });
+  }
+
+  // Called after each loadWeather() render to rebind all cards
+  function rebind() {
+    getDraggables().forEach(bindCard);
+    applyOrder();
+  }
+
+  // Expose so loadWeather can call it after re-rendering
+  window._rebindWeatherDrag = rebind;
+}
+
+async function init() {
+  initWeatherDrag();
+
+  clockTimer        = setInterval(updateClock,     1000);
+  countdownInterval = setInterval(updateCountdown, 1000);
+  updateClock();
+
+  // Initial load — all three in parallel
+  await Promise.allSettled([loadForex(), loadStocks(), loadWeather()]);
+
+  const t = new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('last-updated').textContent = `Loaded ${t}`;
+
+  // Set up independent timers
+  forexTimer = setInterval(loadForex,   CONFIG.forexStockMs);
+  stockTimer = setInterval(loadStocks,  CONFIG.forexStockMs);
+  wxTimer    = setInterval(loadWeather, CONFIG.weatherMs);
+}
+
+init();
+</script>
+</body>
+</html>
