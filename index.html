@@ -490,7 +490,7 @@
 <!-- ── FOOTER ──────────────────────────────────────────────────────────────── -->
 <footer>
   <span id="last-updated">Loading…</span>
-  <span>Forex &amp; stocks: 5 min · Weather: 2 hr · Data: exchangerate-api.com · Yahoo Finance · OpenWeatherMap</span>
+  <span>Forex &amp; stocks: 5 min · Weather: 2 hr · Data: exchangerate-api.com · Twelve Data · OpenWeatherMap</span>
 </footer>
 
 <script>
@@ -508,11 +508,11 @@ const CONFIG = {
   ],
 
   tickers: [
-    { sym: 'RLO.JO',  label: 'RLO',  name: 'Reunert'          },
-    { sym: 'MTM.JO',  label: 'MTM',  name: 'Momentum Met.'    },
-    { sym: 'SDO.JO',  label: 'SDO',  name: 'Stadio'           },
-    { sym: 'LHC.JO',  label: 'LHC',  name: 'Life Healthcare'  },
-    { sym: 'J203.JO', label: 'ALSI', name: 'JSE All Share'    },
+    { sym: 'RLO',   label: 'RLO',  name: 'Reunert'         },
+    { sym: 'MTM',   label: 'MTM',  name: 'Momentum Met.'   },
+    { sym: 'SDO',   label: 'SDO',  name: 'Stadio'          },
+    { sym: 'LHC',   label: 'LHC',  name: 'Life Healthcare' },
+    { sym: 'J203',  label: 'ALSI', name: 'JSE All Share'   },
   ],
 
   cities: [
@@ -523,7 +523,10 @@ const CONFIG = {
   ],
 
   // Replace with your own free key from https://openweathermap.org/appid
-  wxApiKey: '5f99e01efaad90d4231859818aab9ece',
+  wxApiKey: 'bd5e378503939ddaee76f12ad7a97608',
+
+  // Twelve Data API key — https://twelvedata.com
+  tdApiKey: '5987fb24f83a495db99c58142f374e13',
 
   // Refresh intervals
   forexStockMs: 5  * 60 * 1000,   // 5 minutes
@@ -599,42 +602,48 @@ async function loadForex() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   STOCKS
+   STOCKS — Twelve Data
+   Single batch call for all tickers, then /eod for previous close.
 ═══════════════════════════════════════════════════════════════════════════ */
 async function loadStocks() {
   const grid = document.getElementById('stocks-grid');
-  const results = await Promise.allSettled(
-    CONFIG.tickers.map(t =>
-      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t.sym}?interval=1d&range=5d`)
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
-    )
-  );
-  lastStock = Date.now();
+  const syms = CONFIG.tickers.map(t => t.sym).join(',');
+  const exch = 'JSE';
 
-  grid.innerHTML = CONFIG.tickers.map((t, i) => {
-    const res = results[i];
-    if (res.status === 'rejected') {
-      return `<div class="stock-card" onclick="fetchIntraday('${t.sym}','${t.label}','${t.name}',this)" data-sym="${t.sym}">
-        <div class="s-header"><span class="s-ticker">${t.label}</span></div>
-        <div class="s-name">${t.name}</div>
-        <div class="err" style="font-size:10px;margin-top:4px">⚠ Data unavailable</div>
-      </div>`;
-    }
-    try {
-      const m    = res.value.chart.result[0].meta;
-      const price = m.regularMarketPrice;
-      const prev  = m.chartPreviousClose || m.previousClose;
-      const hi    = m.regularMarketDayHigh;
-      const lo    = m.regularMarketDayLow;
-      const chg   = price - prev;
-      const pct   = (chg / prev) * 100;
-      const cls   = chg > 0 ? 'up' : chg < 0 ? 'dn' : 'nt';
-      const arrow = chg > 0 ? '▲' : chg < 0 ? '▼' : '●';
-      const span  = hi - lo;
-      const dot   = span > 0 ? Math.min(100, Math.max(0, ((price - lo) / span) * 100)) : 50;
-      const closed = m.marketState === 'CLOSED' || m.marketState === 'PRE';
+  try {
+    // Batch quote — price, open, high, low, previous_close, percent_change in one call
+    const r = await fetch(
+      `https://api.twelvedata.com/quote?symbol=${syms}&exchange=${exch}&apikey=${CONFIG.tdApiKey}`
+    );
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    lastStock = Date.now();
 
+    grid.innerHTML = CONFIG.tickers.map(t => {
+      // TD returns a single object if one symbol, keyed object if many
+      const q = data[t.sym] || data;
+
+      if (q.status === 'error' || !q.close) {
+        return `<div class="stock-card" onclick="fetchIntraday('${t.sym}','${t.label}','${t.name}',this)" data-sym="${t.sym}">
+          <div class="s-header"><span class="s-ticker">${t.label}</span></div>
+          <div class="s-name">${t.name}</div>
+          <div class="err" style="font-size:11px;margin-top:6px">⚠ ${q.message || 'Data unavailable'}</div>
+        </div>`;
+      }
+
+      const price  = parseFloat(q.close);
+      const prev   = parseFloat(q.previous_close);
+      const hi     = parseFloat(q.high);
+      const lo     = parseFloat(q.low);
+      const chg    = price - prev;
+      const pct    = parseFloat(q.percent_change);
+      const cls    = chg > 0 ? 'up' : chg < 0 ? 'dn' : 'nt';
+      const arrow  = chg > 0 ? '▲' : chg < 0 ? '▼' : '●';
+      const span   = hi - lo;
+      const dot    = span > 0 ? Math.min(100, Math.max(0, ((price - lo) / span) * 100)) : 50;
+      const closed = q.is_market_open === false;
       const borderCol = chg > 0 ? 'rgba(0,200,150,0.55)' : chg < 0 ? 'rgba(224,82,82,0.55)' : 'var(--border)';
+
       return `<div class="stock-card" onclick="fetchIntraday('${t.sym}','${t.label}','${t.name}',this)" data-sym="${t.sym}" style="border-color:${borderCol}">
         <div class="s-header">
           <span class="s-ticker">${t.label}</span>
@@ -656,12 +665,14 @@ async function loadStocks() {
           <div class="s-field"><label>Day chg</label><span class="${cls}">${chg >= 0 ? '+' : ''}${fmt(chg, 2)}</span></div>
         </div>
       </div>`;
-    } catch {
-      return `<div class="stock-card"><div class="s-ticker">${t.label}</div><div class="err">Parse error</div></div>`;
-    }
-  }).join('');
+    }).join('');
 
-  // Restore active state after re-render
+  } catch(e) {
+    lastStock = Date.now();
+    grid.innerHTML = `<div class="err" style="grid-column:1/-1">⚠ Stock data unavailable — ${e.message}</div>`;
+  }
+
+  // Restore active chart card highlight after re-render
   if (activeTicker) {
     const card = document.querySelector(`[data-sym="${activeTicker}"]`);
     if (card) card.classList.add('active');
@@ -669,7 +680,7 @@ async function loadStocks() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   INTRADAY CHART
+   INTRADAY CHART — Twelve Data
 ═══════════════════════════════════════════════════════════════════════════ */
 async function fetchIntraday(sym, label, name, cardEl) {
   document.querySelectorAll('.stock-card').forEach(c => c.classList.remove('active'));
@@ -687,26 +698,25 @@ async function fetchIntraday(sym, label, name, cardEl) {
   document.getElementById('chart-title').textContent = `${label}  ·  ${name}  ·  intraday 5-min`;
   document.getElementById('chart-meta').textContent = 'Fetching intraday data…';
 
-  // Destroy previous chart instance
   if (activeChart) { activeChart.destroy(); activeChart = null; }
 
   try {
-    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=5m&range=1d`);
-    if (!r.ok) throw new Error();
-    const d    = await r.json();
-    const res  = d.chart.result[0];
-    const ts   = res.timestamp || [];
-    const q    = res.indicators.quote[0];
-    const closes = q.close || [];
+    const r = await fetch(
+      `https://api.twelvedata.com/time_series?symbol=${sym}&exchange=JSE&interval=5min&outputsize=80&apikey=${CONFIG.tdApiKey}`
+    );
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
 
-    const labels = ts.map(t => {
-      const dt = new Date(t * 1000);
-      return dt.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
-    });
+    if (d.status === 'error') throw new Error(d.message);
 
-    const data = closes.map(v => v != null ? parseFloat(v.toFixed(2)) : null);
-    const prev = res.meta.chartPreviousClose;
-    const valid = data.filter(v => v !== null);
+    // TD returns newest-first — reverse to chronological
+    const bars   = [...d.values].reverse();
+    const labels = bars.map(b => b.datetime.slice(11, 16)); // HH:MM
+    const data   = bars.map(b => parseFloat(parseFloat(b.close).toFixed(2)));
+
+    // Previous close = open of the first bar of the day (best proxy from time_series)
+    const prev = parseFloat(bars[0].open);
+    const valid = data.filter(v => !isNaN(v));
     const minP  = Math.min(...valid, prev) * 0.999;
     const maxP  = Math.max(...valid, prev) * 1.001;
 
@@ -775,10 +785,11 @@ async function fetchIntraday(sym, label, name, cardEl) {
     const dayChg = last - prev;
     const dayPct = (dayChg / prev) * 100;
     document.getElementById('chart-meta').textContent =
-      `${ts.length} bars  ·  Open R${fmt(first,2)}  ·  Latest R${fmt(last,2)}  ·  vs prev close ${dayChg >= 0 ? '+' : ''}${fmt(dayChg,2)} (${dayPct >= 0 ? '+' : ''}${fmt(dayPct,2)}%)`;
+      `${bars.length} bars  ·  Open R${fmt(first,2)}  ·  Latest R${fmt(last,2)}  ·  vs prev close ${dayChg >= 0 ? '+' : ''}${fmt(dayChg,2)} (${dayPct >= 0 ? '+' : ''}${fmt(dayPct,2)}%)`;
 
-  } catch {
-    document.getElementById('chart-meta').textContent = '⚠ Intraday data unavailable for this symbol.';
+  } catch(e) {
+    document.getElementById('chart-meta').textContent = `⚠ Intraday data unavailable — ${e.message}`;
+    if (activeChart) { activeChart.destroy(); activeChart = null; }
   }
 }
 
